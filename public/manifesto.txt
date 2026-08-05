@@ -1,0 +1,33 @@
+[INTERNAL_MEMO] // PROJECT_GLST // THE_FREED_SIGNAL
+
+01. THE PROBLEM: ENCAPSULATION
+Digital content has been caged. Corporate DRM (Digital Rights Management)
+isn't just about copyright; it’s about control. They own the player, the
+stream, and the data. The signal is filtered, compressed, and monitored.
+
+02. THE SOLUTION: THE MESH
+GLST Systems exists to provide a "Web-Based Intercept." We don't just stream
+music; we transmit raw data.
+
+The Shield: Our DRM-Shield logic (AudioContext Interception) ensures that
+the listener isn't just a consumer, but a node in the network.
+
+The Scramble: A manual protocol to break tracking algorithms and
+signal-profiling bots.
+
+The Bounty: Direct-to-Source uplink. No middle-man, no corporate delay. A
+financial signal sent directly into the mesh.
+
+03. THE ARCHITECTURE
+We prioritize function over comfort.
+
+Monospace Only: Human readability is secondary to data integrity.
+
+High Contrast: Cyan on Black. The colors of the night-shift operator.
+
+Scanlines: A visual reminder that every digital image is just a series of
+lines being drawn in real-time.
+
+[IMAGE_TYPE: MANIFESTO_OVERLAY]
+
+"If the signal is free, the mind follows. Stay locked. Stay encrypted."

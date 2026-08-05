@@ -1,0 +1,831 @@
+'use client';
+
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import Image from 'next/image';
+import { createClient } from '@supabase/supabase-js';
+import CloudflarePlayer from '@/components/CloudflarePlayer';
+import TipButton from '@/components/TipButton';
+import StreamScheduler from '@/components/StreamScheduler';
+import UpcomingStreams from '@/components/UpcomingStreams';
+import { useGuestlistCamera } from '@/hooks/useGuestlistCamera';
+import { EcosystemHeroBanner } from '@/components/EcosystemHeroBanner';
+import HLSPlayer from '@/components/HLSPlayer';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+export default function Home() {      
+     return (                            
+       <main className="min-h-screen     
+ bg-black p-4">                          
+         <h1 className="text-white       
+ text-2xl mb-4">GUESTLIST.TV</h1>        
+         <HLSPlayer                      
+                                         
+ streamUrl="https://customer-xfdlafmmuyl 
+ rdexv.cloudflarestream.com/6622b373b6e8 
+ 57c4d3bf3954ca9e17be/manifest/video.m3u 
+ 8"                                      
+         />                              
+       </main>                           
+     );                                  
+   }       
+
+
+export default function GuestlistHomepage() {
+  const [session, setSession] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [darkMode, setDarkMode] = useState(true);
+
+  // Toggle dark/light mode
+  const toggleTheme = () => {
+    setDarkMode(!darkMode);
+  };
+
+  const [activeStream] = useState({
+    djName: 'DJ Fabian',
+    eventName: 'Friday Night Live',
+    whepUrl: 'https://customer-xfdlafmmuylrdexv.cloudflarestream.com/4bb182b6458f5b3aad78855863643283/webRTC/play',
+    isLive: true,
+  });
+
+  const [hapticMetrics, setHapticMetrics] = useState({
+    bassResonance: 94,
+    crowdMovement: 88,
+    bountyVelocity: 76,
+    globalHeatIndex: 91.2,
+  });
+
+  const {
+    videoDevices,
+    audioDevices,
+    selectedVideoId,
+    setSelectedVideoId,
+    selectedAudioId,
+    setSelectedAudioId,
+    activeStream: cameraStream,
+    isCapturing,
+    isLiveStream,
+    audioLevel,
+    inputGain,
+    changeGain,
+    error: cameraError,
+    startCapture,
+    stopCapture,
+    toggleGoLive,
+  } = useGuestlistCamera();
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [forceDJMode, setForceDJMode] = useState(false);
+  const [showStreamSettings, setShowStreamSettings] = useState(false);
+  const [isInitializingBroadcast, setIsInitializingBroadcast] = useState(false);
+  const [livePlaybackUrl, setLivePlaybackUrl] = useState<string | null>(null);
+  const [broadcastDuration, setBroadcastDuration] = useState(0);
+  const broadcastTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [userRating, setUserRating] = useState(0);
+  const [hasRated, setHasRated] = useState(false);
+
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const isAdmin = session?.user?.email === 'fabiandubz@gmail.com';
+
+  const getInitials = (email: string) => {
+    return email?.split('@')[0]?.slice(0, 2)?.toUpperCase() || 'DJ';
+  };
+
+  const [activeChannel, setActiveChannel] = useState('BASEMENT');
+  const [previewAsFan, setPreviewAsFan] = useState(false);
+  const channels = [
+    { id: 'MAINROOM', label: 'MAINROOM', sub: 'House & Tech', color: 'from-violet-600 via-fuchsia-500 to-rose-500', textColor: 'text-violet-200', activeColor: 'ring-violet-400', bgColor: 'bg-violet-950/40' },
+    { id: 'BASEMENT', label: 'BASEMENT', sub: 'UKG/DnB', color: 'from-red-600 via-orange-500 to-amber-500', textColor: 'text-red-200', activeColor: 'ring-orange-400', bgColor: 'bg-red-950/40' },
+    { id: 'LOUNGE', label: 'LOUNGE', sub: 'RnB/Afro', color: 'from-emerald-600 via-teal-500 to-cyan-500', textColor: 'text-emerald-200', activeColor: 'ring-teal-400', bgColor: 'bg-emerald-950/40' },
+    { id: 'THE LAB', label: 'THE LAB', sub: 'Leftfield', color: 'from-blue-600 via-indigo-500 to-purple-500', textColor: 'text-blue-200', activeColor: 'ring-indigo-400', bgColor: 'bg-blue-950/40' },
+  ];
+
+  const isDJ = forceDJMode || profile?.tier === 'vanguard' || profile?.tier === 'dj';
+
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+
+    const fetchMessages = async () => {
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(100);
+      if (data) setChatMessages(data);
+    };
+    fetchMessages();
+
+    const channel = supabase
+      .channel('messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        setChatMessages((prev) => [...prev, payload.new]);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session]);
+
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) loadProfile(session.user.id);
+      else setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session?.user) loadProfile(session.user.id);
+      else { setProfile(null); setLoading(false); }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // Close auth modal when user signs in
+    if (session?.user && showAuthModal) {
+      setShowAuthModal(false);
+      setAuthError('');
+    }
+  }, [session, showAuthModal]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setHapticMetrics((prev) => {
+        const deltaBass = (Math.random() - 0.5) * 4;
+        const deltaMove = (Math.random() - 0.5) * 3;
+        const nextBass = Math.min(Math.max(Math.round(prev.bassResonance + deltaBass), 80), 100);
+        const nextMove = Math.min(Math.max(Math.round(prev.crowdMovement + deltaMove), 75), 98);
+        const nextIndex = parseFloat(((nextBass * 0.4) + (nextMove * 0.4) + (prev.bountyVelocity * 0.2)).toFixed(1));
+        return { ...prev, bassResonance: nextBass, crowdMovement: nextMove, globalHeatIndex: nextIndex };
+      });
+    }, 2500);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (isLiveStream) {
+      setBroadcastDuration(0);
+      broadcastTimerRef.current = setInterval(() => {
+        setBroadcastDuration((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (broadcastTimerRef.current) {
+        clearInterval(broadcastTimerRef.current);
+        broadcastTimerRef.current = null;
+      }
+      setBroadcastDuration(0);
+    }
+    return () => {
+      if (broadcastTimerRef.current) {
+        clearInterval(broadcastTimerRef.current);
+      }
+    };
+  }, [isLiveStream]);
+
+  const loadProfile = async (userId: string) => {
+    try {
+      const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      setProfile(data || { tier: 'supporter' });
+    } catch (err) {
+      setProfile({ tier: 'supporter' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      if (authMode === 'signup') {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        alert('Account created! Check your email.');
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (err: any) {
+      setAuthError(err.message);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  const sendMessage = async () => {
+    if (!chatInput.trim() || !session?.user) return;
+    const { error } = await supabase.from('messages').insert({
+      content: chatInput.trim(),
+      user_id: session.user.id,
+      user_email: session.user.email,
+    });
+    if (!error) setChatInput('');
+  };
+
+  const handleGoLive = async () => {
+    if (isLiveStream) {
+      await toggleGoLive();
+      setLivePlaybackUrl(null);
+      return;
+    }
+
+    if (!isCapturing) {
+      alert('Start camera first!');
+      return;
+    }
+
+    setIsInitializingBroadcast(true);
+    try {
+      const whipUrl = 'https://customer-xfdlafmmuylrdexv.cloudflarestream.com/06f1b6c11f4b525397cda0d1614a35bdk4bb182b6458f5b3aad78855863643283/webRTC/publish';
+      const whepUrl = 'https://customer-xfdlafmmuylrdexv.cloudflarestream.com/4bb182b6458f5b3aad78855863643283/webRTC/play';
+      setLivePlaybackUrl(whepUrl);
+      await toggleGoLive(whipUrl);
+    } catch (err: any) {
+      alert(`Broadcast Error: ${err.message}`);
+    } finally {
+      setIsInitializingBroadcast(false);
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  if (loading) {
+    return (
+      <div className={`min-h-screen ${darkMode ? 'bg-black text-white' : 'bg-white text-black'} flex items-center justify-center`}>
+        <div className="text-center">
+          <Image src="/the_guestlint_web.svg" alt="Guestlist" width={300} height={80} className="mb-4" />
+          <p className="text-sm tracking-widest text-[#D4AF37]">LOADING...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`min-h-screen ${darkMode ? 'bg-black text-white' : 'bg-white text-black'} font-mono`}>
+      <header className={`fixed top-0 left-0 right-0 z-50 ${darkMode ? 'bg-black border-neutral-800' : 'bg-white border-neutral-200'} border-b`}>
+        <div className="max-w-[900px] mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Image src="/G_logo.png" alt="Guestlist" width={40} height={40} className="rounded mt-2" />
+            <Image src="/the_guestlint_web.svg" alt="Guestlist.tv" width={200} height={50} className="hidden md:block" />
+          </div>
+          <nav className="flex items-center gap-2">
+            <button className="px-4 py-2 text-xs font-black tracking-widest rounded-lg text-neutral-400 hover:text-white transition-colors">MARKET</button>
+            
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 transition-colors"
+              title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {darkMode ? (
+                <svg className="w-4 h-4 text-[#D4AF37]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
+            
+            {session ? (
+              <div className="flex items-center gap-2" ref={userMenuRef}>
+                {isAdmin && (
+                  <a
+                    href="/admin"
+                    className="px-3 py-1.5 text-[10px] font-black tracking-widest rounded-lg bg-purple-600 text-white hover:bg-purple-500 transition-colors"
+                  >
+                    ADMIN
+                  </a>
+                )}
+                <button
+                  onClick={() => { setForceDJMode(!forceDJMode); setShowStreamSettings(false); }}
+                  className={`px-3 py-1.5 text-[10px] font-black tracking-widest rounded-lg border transition-colors ${
+                    forceDJMode
+                      ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
+                      : 'bg-neutral-900 text-neutral-400 border-neutral-700 hover:text-white'
+                  }`}
+                >
+                  {forceDJMode ? 'DJ ON' : 'DJ MODE'}
+                </button>
+                {isDJ && (
+                  <button
+                    onClick={() => setPreviewAsFan(!previewAsFan)}
+                    className={`px-3 py-1.5 text-[10px] font-black tracking-widest rounded-lg border transition-colors ${
+                      previewAsFan
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-neutral-900 text-neutral-400 border-neutral-700 hover:text-white'
+                    }`}
+                  >
+                    {previewAsFan ? '👁 PREVIEWING' : '👁 PREVIEW'}
+                  </button>
+                )}
+                {isDJ && <span className="px-2 py-0.5 text-[10px] font-black bg-[#D4AF37] text-black rounded tracking-wider">DJ</span>}
+                
+                {/* Avatar Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="flex items-center gap-2 px-2 py-1.5 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+                  >
+                    <div className="w-7 h-7 bg-[#D4AF37] rounded-full flex items-center justify-center text-[10px] font-black text-black">
+                      {getInitials(session.user.email || '')}
+                    </div>
+                    <span className="text-[10px] text-neutral-400 hidden sm:block">{session.user.email?.split('@')[0]}</span>
+                    <svg className={`w-3 h-3 text-neutral-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {showUserMenu && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-neutral-900 border border-neutral-800 rounded-lg shadow-xl overflow-hidden z-50">
+                      <div className="px-3 py-2 border-b border-neutral-800">
+                        <p className="text-xs text-neutral-400 truncate">{session.user.email}</p>
+                        {isAdmin && <span className="text-[10px] text-[#D4AF37] font-bold">SITE ADMIN</span>}
+                      </div>
+                      <a
+                        href="/profile"
+                        className="w-full text-left px-3 py-2 text-xs text-white hover:bg-neutral-800 transition-colors flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        Edit Profile
+                      </a>
+                      <button
+                        onClick={() => { setShowStreamSettings(true); setShowUserMenu(false); }}
+                        className="w-full text-left px-3 py-2 text-xs text-white hover:bg-neutral-800 transition-colors flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Account Settings
+                      </button>
+                      {isAdmin && (
+                        <a
+                          href="/admin"
+                          className="w-full text-left px-3 py-2 text-xs text-[#D4AF37] hover:bg-neutral-800 transition-colors flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                          </svg>
+                          Admin Dashboard
+                        </a>
+                      )}
+                      <div className="border-t border-neutral-800">
+                        <button
+                          onClick={handleSignOut}
+                          className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-neutral-800 transition-colors flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                          </svg>
+                          Sign Out
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => { setShowAuthModal(true); setAuthMode('signin'); }} className="px-4 py-2 bg-[#D4AF37] hover:bg-[#AA8417] text-black text-xs font-black tracking-widest rounded-lg transition-colors">SIGN IN</button>
+            )}
+          </nav>
+        </div>
+      </header>
+
+      <div className={`pt-16 ${darkMode ? 'bg-black' : 'bg-white'}`}>
+        <div className="max-w-[900px] mx-auto px-4">
+          <EcosystemHeroBanner />
+        </div>
+      </div>
+
+      <div className="max-w-[900px] mx-auto px-4 py-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+            <span className="text-sm font-black tracking-widest text-red-500 uppercase">LIVE NOW</span>
+            <span className="text-sm text-neutral-400">{activeStream.djName} — {activeStream.eventName}</span>
+          </div>
+          <div className="text-xs font-bold tracking-widest text-neutral-600">142 VIEWERS</div>
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar hide-scrollbar"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          {channels.map((channel) => (
+            <button
+              key={channel.id}
+              onClick={() => setActiveChannel(channel.id)}
+              className={`relative flex-1 min-w-[100px] px-3 py-3 text-[9px] font-black uppercase tracking-[0.15em] rounded-xl whitespace-nowrap transition-all duration-300 cursor-pointer overflow-hidden ${
+                activeChannel === channel.id
+                  ? `${channel.activeColor} ring-2 shadow-lg scale-[1.02]`
+                  : 'hover:scale-[1.02] hover:shadow-md'
+              }`}
+            >
+              {/* Gradient background */}
+              <div className={`absolute inset-0 bg-gradient-to-br ${channel.color} opacity-80`} />
+              
+              {/* Active overlay */}
+              {activeChannel === channel.id && (
+                <div className="absolute inset-0 bg-white/20" />
+              )}
+              
+              {/* Content */}
+              <div className="relative z-10 flex flex-col items-center gap-0.5">
+                <span className="text-white drop-shadow-md">{channel.label}</span>
+                <span className="text-[7px] opacity-90 text-white/80 font-bold tracking-wider">{channel.sub}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {isDJ && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowStreamSettings(!showStreamSettings)}
+              className={`px-3 py-1.5 text-[10px] font-black tracking-widest rounded-lg border transition-colors ${
+                showStreamSettings
+                  ? 'bg-[#D4AF37] text-black border-[#D4AF37]'
+                  : 'bg-neutral-900 text-neutral-400 border-neutral-700 hover:text-white'
+              }`}
+            >
+              {showStreamSettings ? '✓ SETTINGS OPEN' : '⚙️ STREAM SETTINGS'}
+            </button>
+            {!isCapturing ? (
+              <button
+                onClick={() => startCapture()}
+                className="px-3 py-1.5 text-[10px] font-black tracking-widest rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+              >
+                📷 START CAMERA
+              </button>
+            ) : (
+              <button
+                onClick={stopCapture}
+                className="px-3 py-1.5 text-[10px] font-black tracking-widest rounded-lg bg-rose-950 border border-rose-800 text-rose-400 hover:bg-rose-900 transition-colors"
+              >
+                ⏹ STOP CAMERA
+              </button>
+            )}
+            {isLiveStream && (
+              <span className="px-2 py-1 text-[10px] font-black bg-red-600 text-white rounded animate-pulse">🔴 LIVE</span>
+            )}
+          </div>
+        )}
+
+        {isDJ && showStreamSettings && (
+          <div className="bg-neutral-950 border border-neutral-900 rounded-xl p-5 space-y-4">
+            <div className="flex justify-between items-center border-b border-neutral-900 pb-2">
+              <h3 className="text-[10px] font-black tracking-widest text-[#D4AF37] uppercase">Stream Configuration</h3>
+              <button onClick={() => setShowStreamSettings(false)} className="text-neutral-500 hover:text-white text-lg">×</button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold">Video Source</label>
+                <select
+                  value={selectedVideoId}
+                  onChange={(e) => setSelectedVideoId(e.target.value)}
+                  disabled={isCapturing}
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 text-[10px] text-white outline-none focus:border-[#D4AF37] disabled:opacity-50"
+                >
+                  {videoDevices.map((device) => (
+                    <option key={device.deviceId} value={device.deviceId}>{device.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold">Audio Source</label>
+                <select
+                  value={selectedAudioId}
+                  onChange={(e) => setSelectedAudioId(e.target.value)}
+                  disabled={isCapturing}
+                  className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 text-[10px] text-white outline-none focus:border-[#D4AF37] disabled:opacity-50"
+                >
+                  {audioDevices.map((device) => (
+                    <option key={device.deviceId} value={device.deviceId}>{device.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="p-3 bg-neutral-900 border border-neutral-800 rounded-xl">
+              <div className="flex justify-between items-center text-[9px] font-bold text-neutral-400 uppercase tracking-widest mb-2">
+                <span>Master Gain: {Math.round(inputGain * 100)}%</span>
+                <span className={audioLevel > 85 ? 'text-rose-500' : 'text-emerald-400'}>VU: {audioLevel}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="2"
+                step="0.05"
+                value={inputGain}
+                onChange={(e) => changeGain(parseFloat(e.target.value))}
+                className="w-full accent-[#D4AF37] mb-2"
+              />
+              <div className="h-2 bg-black rounded-full overflow-hidden p-0.5 border border-neutral-800">
+                <div
+                  className={`h-full rounded-full transition-all duration-75 ${audioLevel > 85 ? 'bg-gradient-to-r from-emerald-500 to-rose-600' : 'bg-gradient-to-r from-emerald-500 to-[#D4AF37]'}`}
+                  style={{ width: `${audioLevel}%` }}
+                />
+              </div>
+            </div>
+            {cameraError && (
+              <div className="p-3 bg-rose-950/90 border border-rose-800 text-rose-300 text-[10px] rounded-lg">⚠️ {cameraError}</div>
+            )}
+          </div>
+        )}
+
+        <div className="aspect-video bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 relative">
+          {isDJ && !previewAsFan ? (
+            cameraStream ? (
+              <>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                {isLiveStream && (
+                  <div className="absolute top-4 left-4 bg-rose-600/90 text-white px-3 py-1 rounded-full font-black text-[10px] tracking-widest uppercase animate-pulse">
+                    🔴 LIVE
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-neutral-600">
+                <span className="text-4xl">🎛️</span>
+                <span className="text-[11px] tracking-widest uppercase font-bold text-neutral-500">[ FEED_OFFLINE ]: START CAMERA TO PREVIEW</span>
+              </div>
+            )
+          ) : (
+            <CloudflarePlayer whepUrl={activeStream.whepUrl} autoplay={true} />
+          )}
+
+          <div className="absolute bottom-0 left-0 right-0 bg-black/70 backdrop-blur-sm border-t border-white/10 px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                <span className="text-[9px] font-black text-neutral-300 tracking-widest">142</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-black text-[#D4AF37]">●</span>
+                <span className="text-[9px] font-black text-neutral-300 tracking-widest">{isDJ && isLiveStream ? formatDuration(broadcastDuration) : '45:32'}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-[9px] font-black text-neutral-400 tracking-widest">
+                HEAT {hapticMetrics.globalHeatIndex}°
+              </div>
+              {isDJ && (
+                <button
+                  onClick={handleGoLive}
+                  disabled={isInitializingBroadcast || !isCapturing}
+                  className={`text-[9px] font-black tracking-widest px-2 py-0.5 rounded transition-colors ${
+                    isLiveStream
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-[#D4AF37] text-black hover:bg-[#AA8417]'
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  {isLiveStream ? 'END' : isInitializingBroadcast ? '...' : 'GO LIVE'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {session ? (
+          <div className="bg-neutral-950 border border-neutral-900 rounded-xl overflow-hidden">
+            <div className="p-3 border-b border-neutral-900 flex justify-between items-center">
+              <h3 className="text-[10px] font-black tracking-widest text-[#D4AF37] uppercase">💬 LIVE CHAT</h3>
+              <span className="text-[9px] text-neutral-600">{chatMessages.length}</span>
+            </div>
+            <div ref={chatContainerRef} className="p-3 space-y-2 max-h-[160px] overflow-y-auto">
+              {chatMessages.length === 0 ? (
+                <div className="text-xs text-neutral-500 text-center py-3">No messages yet. Say something!</div>
+              ) : (
+                chatMessages.map((msg, i) => (
+                  <div key={msg.id || i} className="text-xs text-neutral-300 leading-relaxed">
+                    <span className="text-[#D4AF37] font-bold">{msg.user_email?.split('@')[0] || 'Anonymous'}:</span>{' '}
+                    {msg.content}
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="p-3 border-t border-neutral-900 flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                placeholder="Send a message..."
+                className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
+              />
+              <button
+                onClick={sendMessage}
+                disabled={!chatInput.trim()}
+                className="px-3 py-2 bg-[#D4AF37] text-black text-[10px] font-black rounded-lg hover:bg-[#AA8417] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                SEND
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-neutral-950 border border-neutral-900 rounded-xl p-4 text-center">
+            <p className="text-xs text-neutral-400 mb-2">Sign in to join the live chat</p>
+            <button onClick={() => { setShowAuthModal(true); setAuthMode('signin'); }} className="px-4 py-2 bg-[#D4AF37] text-black text-[10px] font-black tracking-widest rounded-lg hover:bg-[#AA8417] transition-colors">SIGN IN TO CHAT</button>
+          </div>
+        )}
+
+        {isDJ && session?.user && (
+          <div className="bg-neutral-950 border border-neutral-900 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black tracking-widest text-[#D4AF37] uppercase">DJ CONTROLS</h3>
+                <p className="text-xs text-neutral-400 mt-1">Manage your stream and profile</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowStreamSettings(!showStreamSettings)}
+                  className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-xs font-black tracking-widest rounded-lg transition-colors"
+                >
+                  STREAM SETTINGS
+                </button>
+                <a
+                  href="/profile"
+                  className="px-4 py-2 bg-[#D4AF37] hover:bg-[#AA8417] text-black text-xs font-black tracking-widest rounded-lg transition-colors inline-block"
+                >
+                  EDIT PROFILE
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <UpcomingStreams channelFilter={activeChannel} />
+
+        <div className="p-5 bg-neutral-950 border border-neutral-900 rounded-xl font-mono shadow-sm">
+          <div className="flex justify-between items-center mb-4 pb-2 border-b border-neutral-900">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold tracking-[0.2em] text-[#D4AF37] uppercase">Haptic Reaction Node</span>
+              <h3 className="text-sm font-extrabold tracking-wider uppercase mt-0.5">Live Heat Map Model</h3>
+            </div>
+            <div className="text-[11px] font-black text-rose-500 animate-pulse uppercase tracking-widest flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-500 block"></span>
+              INDEX: {hapticMetrics.globalHeatIndex}%
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 flex flex-col gap-2">
+              <div className="flex justify-between text-[10px] uppercase text-neutral-500 font-bold">
+                <span>Sub Bass Resonance</span>
+                <span className="text-white">{hapticMetrics.bassResonance}%</span>
+              </div>
+              <div className="h-1.5 bg-neutral-950 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-[#AA8417] to-[#D4AF37] transition-all duration-300" style={{ width: `${hapticMetrics.bassResonance}%` }} />
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 flex flex-col gap-2">
+              <div className="flex justify-between text-[10px] uppercase text-neutral-500 font-bold">
+                <span>Vibration / Motion</span>
+                <span className="text-white">{hapticMetrics.crowdMovement}%</span>
+              </div>
+              <div className="h-1.5 bg-neutral-950 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-[#AA8417] to-[#D4AF37] transition-all duration-300" style={{ width: `${hapticMetrics.crowdMovement}%` }} />
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 flex flex-col gap-2">
+              <div className="flex justify-between text-[10px] uppercase text-neutral-500 font-bold">
+                <span>Tip Payout Velocity</span>
+                <span className="text-white">{hapticMetrics.bountyVelocity}%</span>
+              </div>
+              <div className="h-1.5 bg-neutral-950 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-[#AA8417] to-[#D4AF37]" style={{ width: `${hapticMetrics.bountyVelocity}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-[#D4AF37] to-orange-600 rounded-full flex items-center justify-center text-2xl">🎧</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold">DJ Fabian</h3>
+              <p className="text-sm text-neutral-400">Dubstep • Garage • Bass Music</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button className="px-4 py-2 bg-[#D4AF37] text-black text-xs font-black tracking-widest rounded-lg hover:bg-[#AA8417] transition-colors">FOLLOW</button>
+              {session && <TipButton djId="dj-fabian-id" djName="DJ Fabian" streamId={activeChannel} userEmail={session.user.email} userId={session.user.id} />}
+            </div>
+          </div>
+          
+          {/* Rating System */}
+          {session && (
+            <div className="mt-4 pt-4 border-t border-neutral-800">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-neutral-400">{hasRated ? 'Thanks for rating!' : 'Rate this set:'}</span>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => {
+                        if (!hasRated) {
+                          setUserRating(star);
+                          setHasRated(true);
+                          // TODO: Send rating to API
+                        }
+                      }}
+                      disabled={hasRated}
+                      className={`text-lg transition-colors ${
+                        star <= userRating ? 'text-[#D4AF37]' : 'text-neutral-600'
+                      } ${hasRated ? 'cursor-default' : 'hover:text-[#D4AF37]'}`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showAuthModal && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`${darkMode ? 'bg-neutral-900 border-neutral-800' : 'bg-white border-neutral-200'} border rounded-2xl p-8 max-w-md w-full space-y-6`}>
+            <div className="text-center space-y-2">
+              <Image src="/the_guestlint_web.svg" alt="Guestlist" width={200} height={50} className="mx-auto" />
+              <h2 className="text-xl font-black tracking-wider">{authMode === 'signup' ? 'JOIN GUESTLIST' : 'WELCOME BACK'}</h2>
+            </div>
+            <form onSubmit={handleAuth} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold tracking-widest text-neutral-500">EMAIL</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={`w-full border border-neutral-800 rounded-lg px-4 py-3 focus:outline-none focus:border-[#D4AF37] transition-colors ${darkMode ? 'bg-black text-white' : 'bg-neutral-100 text-black'}`} placeholder="dj@example.com" required />
+              </div>
+              <div>
+                <label className="text-xs font-bold tracking-widest text-neutral-500">PASSWORD</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={`w-full border border-neutral-800 rounded-lg px-4 py-3 focus:outline-none focus:border-[#D4AF37] transition-colors ${darkMode ? 'bg-black text-white' : 'bg-neutral-100 text-black'}`} placeholder="••••••••" required />
+              </div>
+              {authError && <div className="text-red-500 text-sm bg-red-950/50 border border-red-800 rounded-lg p-3">{authError}</div>}
+              <button type="submit" className="w-full bg-[#D4AF37] hover:bg-[#AA8417] text-black font-black text-sm tracking-widest py-3 rounded-lg transition-colors">{authMode === 'signup' ? 'CREATE ACCOUNT' : 'SIGN IN'}</button>
+            </form>
+            <div className="text-center">
+              <button onClick={() => { setAuthMode(authMode === 'signup' ? 'signin' : 'signup'); setAuthError(''); }} className="text-xs text-neutral-400 hover:text-white transition-colors">{authMode === 'signup' ? 'Already have an account? Sign in' : 'New here? Create account'}</button>
+            </div>
+            <button onClick={() => setShowAuthModal(false)} className="w-full py-2 text-xs text-neutral-500 hover:text-white transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

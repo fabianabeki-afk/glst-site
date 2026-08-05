@@ -1,0 +1,326 @@
+@import "tailwindcss";
+
+:root {
+  /* Default: Modern Studio Light Mode */
+  --background: #F8FAFC; 
+  --foreground: #0F172A; 
+  --card-bg: #FFFFFF;    
+  --guestlist-gold: #AA8417; 
+  --guestlist-gold-glow: rgba(170, 132, 23, 0.2);
+  --border-color: rgba(226, 232, 240, 0.9);
+  --font-sans: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+html, body {
+  font-family: var(--font-inter), var(--font-sans);
+}
+
+[data-theme="dark"] {
+  /* Premium Velvet Midnight Mode */
+  --background: #000000; 
+  --foreground: #F1F5F9; 
+  --card-bg: #121212;    
+  --guestlist-gold: #D4AF37; 
+  --guestlist-gold-glow: rgba(212, 175, 55, 0.45);
+  --border-color: rgba(38, 38, 38, 0.8);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+@theme {
+  --animate-signal-flicker: signal-flicker 3s ease-in-out infinite;
+  --animate-slow-spin: spin 20s linear infinite;
+  --animate-slow-spin-once: spin 20s linear 1 forwards;
+  --color-guestlist-gold: #D4AF37;
+  --color-guestlist-silver: #F1F5F9;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes signal-flicker {
+  0% { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+  50% { 
+    opacity: 0.85; 
+    transform: translateY(-0.5px); 
+  }
+  100% { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+/* Hide scrollbar for channel buttons */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* THE PREMIUM OVERLAY */
+body::after {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: radial-gradient(circle, rgba(120, 120, 120, 0.015) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Custom Luxury Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--background); }
+::-webkit-scrollbar-thumb { background: var(--card-bg); border: 1px solid var(--guestlist-gold); border-radius: 3px; }
+
+/* Elegant Champagne Elements */
+.glst-glow {
+  text-shadow: 0 0 10px var(--guestlist-gold-glow);
+}
+
+.glst-text-glow {
+  text-shadow: 0 0 14px rgba(255, 255, 255, 0.15);
+}
+
+.glst-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  transition: border-color 0.3s ease;
+}
+
+.glst-brand {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+}
+
+/* Crown/VIP Ring Emblem */
+.glst-emblem {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  position: relative;
+  background: radial-gradient(circle at center, rgba(212, 175, 55, 0.08), transparent),
+              linear-gradient(135deg, rgba(212, 175, 55, 0.4), rgba(212, 175, 55, 0.02));
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), inset 0 0 12px rgba(212, 175, 55, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-theme="dark"] .glst-emblem {
+  background: radial-gradient(circle at center, rgba(212, 175, 55, 0.08), rgba(0, 0, 0, 0.8)),
+              linear-gradient(135deg, rgba(212, 175, 55, 0.4), rgba(212, 175, 55, 0.02));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), inset 0 0 12px rgba(212, 175, 55, 0.1);
+}
+
+.glst-emblem::after {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--guestlist-gold);
+  border-bottom: none;
+  border-left: none;
+  transform: rotate(-45deg);
+}
+
+.glst-brand-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.glst-logotype {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--foreground);
+}
+
+.glst-logotype-accent {
+  color: var(--guestlist-gold);
+}
+
+.glst-tagline {
+  margin-top: 0.15rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.4em;
+  color: #737373;
+  text-transform: uppercase;
+}
+
+.glst-header-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+}
+
+.glst-status-pill {
+  font-size: 0.6rem;
+  letter-spacing: 0.25em;
+  color: var(--guestlist-gold);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  background: rgba(212, 175, 55, 0.05);
+  padding: 0.25rem 0.60rem;
+  border-radius: 4px;
+}
+
+.glst-shell {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+@media (min-width: 768px) {
+  .glst-shell {
+    padding: 2.5rem 4rem;
+  }
+}
+
+.glst-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+@media (min-width: 1024px) {
+  .glst-body {
+    flex-direction: row;
+  }
+}
+
+.glst-feed {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Premium Main 4K Window */
+.glst-feed-viewport {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--border-color);
+  background: #000000;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  transition: border-color 0.3s ease;
+}
+
+[data-theme="dark"] .glst-feed-viewport {
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.9);
+}
+
+.glst-feed-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Floating HUD Live Indicator */
+.glst-feed-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  margin: 1.25rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+}
+
+[data-theme="dark"] .glst-feed-status {
+  background: rgba(18, 18, 18, 0.85);
+}
+
+.glst-feed-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: #E11D48;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+.glst-feed-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: #404040;
+}
+
+[data-theme="dark"] .glst-feed-label {
+  color: #D4D4D4;
+}
+
+.glst-protection-grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .glst-protection-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Premium Dashboard UI Interaction Buttons */
+.glst-btn {
+  padding: 1.25rem 1rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  color: var(--foreground);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  border-radius: 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.glst-btn:hover {
+  opacity: 1;
+  border-color: var(--guestlist-gold);
+}
+
+/* Activated VIP/Shield Systems state */
+.glst-btn--shield.is-active {
+  border-color: var(--guestlist-gold);
+  background: linear-gradient(180deg, var(--guestlist-gold-glow) 0%, transparent 100%);
+}
+
+/* Special Warning/Emergency Function Buttons */
+.glst-btn--scramble {
+  opacity: 0.6;
+}
+
+.glst-btn--scramble:hover:not(:disabled) {
+  background: rgba(225, 29, 72, 0.05);
+  border-color: rgba(225, 29, 72, 0.4);
+  color: #F43F5E;
+  opacity: 1;
+}
