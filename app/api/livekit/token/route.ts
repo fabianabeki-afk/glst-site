@@ -1,5 +1,5 @@
-import { AccessToken } from 'livekit-server-sdk';
 import { NextResponse } from 'next/server';
+import jwt from 'jsonwebtoken';
 
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || 'APISzYs7v6TvQ2t';
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || '5EWetwwfeHTeY8XCCk9T8WYkGAgeb73aJRaGNzdtIG4G';
@@ -10,37 +10,33 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { roomName, identity, role } = body;
 
-    const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
-      identity: identity || `viewer-${Date.now()}`,
-      name: 'Viewer',
+    const room = roomName || 'fabiandubz-stream';
+    const userIdentity = identity || `viewer-${Date.now()}`;
+
+    // Create token payload
+    const payload = {
+      iss: LIVEKIT_API_KEY,
+      sub: userIdentity,
+      video: {
+        roomJoin: true,
+        room: room,
+        canPublish: role === 'broadcaster',
+        canSubscribe: role !== 'broadcaster',
+        canPublishData: true,
+      },
+    };
+
+    // Sign the token
+    const token = jwt.sign(payload, LIVEKIT_API_SECRET, {
+      expiresIn: '24h',
     });
 
-    if (role === 'broadcaster') {
-      // Broadcaster token (for iOS)
-      token.addGrant({
-        roomJoin: true,
-        room: roomName || 'fabiandubz-stream',
-        canPublish: true,
-        canSubscribe: false,
-        canPublishData: true,
-      });
-    } else {
-      // Viewer token (for web app)
-      token.addGrant({
-        roomJoin: true,
-        room: roomName || 'fabiandubz-stream',
-        canPublish: false,
-        canSubscribe: true,
-        canPublishData: false,
-      });
-    }
-
-    const jwt = token.toJwt();
+    console.log('Generated token length:', token.length);
 
     return NextResponse.json({
-      token: jwt,
+      token: token,
       url: LIVEKIT_URL,
-      roomName: roomName || 'fabiandubz-stream',
+      roomName: room,
     });
 
   } catch (error) {
