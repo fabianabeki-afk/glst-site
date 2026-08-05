@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Room, RoomEvent, VideoTrack, Track } from 'livekit-client';
+import { Room, RoomEvent, Track } from 'livekit-client';
 
 interface LiveKitPlayerProps {
   url: string;
@@ -8,7 +8,7 @@ interface LiveKitPlayerProps {
 }
 
 export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPlayerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,15 +40,9 @@ export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPla
           console.log('TrackSubscribed event:', track.kind, 'from', participant.identity);
           if (track.kind === Track.Kind.Video) {
             console.log('Attaching video track');
-            const videoElement = track.attach();
-            videoElement.className = 'w-full h-full object-contain';
-            
-            if (containerRef.current) {
-              // Clear previous content
-              containerRef.current.innerHTML = '';
-              containerRef.current.appendChild(videoElement);
+            if (videoRef.current) {
+              track.attach(videoRef.current);
             }
-            
             setIsLoading(false);
           }
         });
@@ -98,41 +92,42 @@ export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPla
   }, [url, token]);
 
   return (
-    <div className={`relative w-full h-full bg-black ${className}`}>
-      {/* Video Container */}
-      <div 
-        ref={containerRef} 
-        className="w-full h-full flex items-center justify-center"
-      >
-        {isLoading && (
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-            <p className="text-white text-sm">Connecting to stream...</p>
+    <div className={`relative ${className}`}>
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+          <div className="text-white text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+            <p className="text-sm">Connecting to stream...</p>
           </div>
-        )}
-      </div>
-
-      {/* Status Overlay */}
-      {isConnected && !isLoading && (
-        <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/50 px-3 py-1 rounded-full">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-          <span className="text-white text-xs font-medium">LIVE</span>
         </div>
       )}
-
-      {/* Error Overlay */}
+      
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-          <div className="text-center text-white p-4">
-            <div className="text-red-400 mb-2">⚠️ Stream Error</div>
-            <p className="text-sm">{error}</p>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+          <div className="text-white text-center p-4">
+            <p className="text-red-400 mb-2">⚠️ {error}</p>
             <button 
               onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-gray-200"
+              className="px-4 py-2 bg-blue-600 rounded-lg text-sm hover:bg-blue-700 transition-colors"
             >
               Retry
             </button>
           </div>
+        </div>
+      )}
+      
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="w-full h-full object-contain"
+        style={{ backgroundColor: '#000' }}
+      />
+      
+      {isConnected && (
+        <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-2 py-1 rounded-full">
+          ● LIVE
         </div>
       )}
     </div>
