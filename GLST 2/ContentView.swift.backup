@@ -1,0 +1,468 @@
+import SwiftUI
+import HaishinKit
+import RTMPHaishinKit
+
+struct ContentView: View {
+    @StateObject private var streamManager = StreamManager()
+    @State private var isLive = false
+    @State private var rtmpUrl = ""
+    @State private var streamKey = ""
+    @State private var showSettings = false
+    @State private var showProfile = false
+    @State private var showBroadcast = false
+    @State private var djName = "DJ Fabian"
+    @State private var isLoading = false
+    
+    // Cloudflare API endpoint
+    let apiBaseUrl = "https://www.guestlist.tv/api"
+    
+    var body: some View {
+        Group {
+            if showBroadcast {
+                BroadcastView(
+                    streamManager: streamManager,
+                    isLive: $isLive,
+                    isLoading: $isLoading,
+                    djName: $djName,
+                    onClose: { showBroadcast = false }
+                )
+            } else {
+                HomeView()
+                    .overlay(
+                        // Floating Go Live Button
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                Button(action: {
+                                    Task {
+                                        await startBroadcast()
+                                    }
+                                }) {
+                                    HStack {
+                                        if isLoading {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                                        } else {
+                                            Image(systemName: "video.fill")
+                                            Text("GO LIVE")
+                                                .font(.system(.caption, design: .monospaced))
+                                                .fontWeight(.black)
+                                        }
+                                    }
+                                    .foregroundColor(.black)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 12)
+                                    .background(Color(red: 0.831, green: 0.686, blue: 0.216))
+                                    .cornerRadius(25)
+                                    .shadow(color: Color(red: 0.831, green: 0.686, blue: 0.216).opacity(0.4), radius: 10)
+                                }
+                                .padding(.trailing, 20)
+                                .padding(.bottom, 30)
+                            }
+                        }
+                    )
+            }
+        }
+    }
+    
+    func startBroadcast() async {
+        isLoading = true
+        
+        do {
+            guard let url = URL(string: "\(apiBaseUrl)/cloudflare/rtmp") else {
+                print("Invalid URL")
+                await MainActor.run { isLoading = false }
+                return
+            }
+            
+            let (data, response) = try await URLSession.shared.data(from: url)
+            
+            // Check if response is JSON
+            if let httpResponse = response as? HTTPURLResponse,
+               httpResponse.statusCode == 200,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                
+                if let rtmp = json["rtmp"] as? [String: String],
+                   let url = rtmp["url"],
+                   let key = rtmp["key"] {
+                    
+                    await MainActor.run {
+                        self.rtmpUrl = url
+                        self.streamKey = key
+                        self.isLive = true
+                        self.isLoading = false
+                    }
+                    
+                    streamManager.connectAndPublish(url: url, key: key)
+                } else {
+                    await useFallbackCredentials()
+                }
+            } else {
+                print("API returned non-JSON response, using fallback")
+                await useFallbackCredentials()
+            }
+        } catch {
+            print("Failed to fetch credentials: \(error)")
+            await useFallbackCredentials()
+        }
+    }
+    
+    func useFallbackCredentials() async {
+        let fallbackUrl = "rtmp://live.cloudflare.com:443/live"
+        let fallbackKey = "4bb182b6458f5b3aad78855863643283"
+        
+        await MainActor.run {
+            self.rtmpUrl = fallbackUrl
+            self.streamKey = fallbackKey
+            self.isLive = true
+            self.isLoading = false
+        }
+        
+        streamManager.connectAndPublish(url: fallbackUrl, key: fallbackKey)
+    }
+}
+
+// Broadcast View (Camera + Controls + Chat)
+struct BroadcastView: View {
+    @ObservedObject var streamManager: StreamManager
+    @Binding var isLive: Bool
+    @Binding var isLoading: Bool
+    @Binding var djName: String
+    let onClose: () -> Void
+    @State private var showStreamSettings = false
+    @State private var showChat = true
+    @State private var chatMessage = ""
+    @State private var messages: [ChatMessageData] = [
+        ChatMessageData(username: "raver_42", message: "Let's go! 🔥", time: "2m"),
+        ChatMessageData(username: "bass_head", message: "Sick setup", time: "1m")
+    ]
+    @State private var rtmpUrl = ""
+    @State private var streamKey = ""
+    
+    // API endpoint
+    let apiBaseUrl = "https://www.guestlist.tv/api"
+    
+    var body: some View {
+        ZStack {
+            // Camera Preview
+            GLSTCameraPreview(mixer: streamManager.mixer)
+                .ignoresSafeArea()
+                .cornerRadius(20)
+                .padding(8)
+            
+            VStack {
+                // Top Controls
+                HStack {
+                    Button(action: onClose) {
+                        HStack {
+                            Image(systemName: "chevron.left")
+                            Text("BACK")
+                        }
+                        .font(.system(.caption, design: .monospaced))
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .padding(8)
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(8)
+                    }
+                    
+                    Spacer()
+                    
+                    if isLive {
+                        HStack {
+                            Circle().fill(.red).frame(width: 8, height: 8)
+                            Text("LIVE")
+                                .font(.system(.caption, design: .monospaced))
+                                .fontWeight(.black)
+                                .foregroundColor(.white)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.red.opacity(0.3))
+                        .cornerRadius(8)
+                    }
+                    
+                    // Chat toggle
+                    Button(action: { showChat.toggle() }) {
+                        Image(systemName: showChat ? "message.fill" : "message")
+                            .foregroundColor(.white)
+                            .padding(8)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                    }
+                    
+                    // Settings
+                    Button(action: { showStreamSettings.toggle() }) {
+                        Image(systemName: "gearshape.fill")
+                            .foregroundColor(.white)
+                            .padding(8)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding()
+                
+                Spacer()
+                
+                // Chat Overlay (when enabled)
+                if showChat {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("LIVE CHAT")
+                            .font(.system(.caption, design: .monospaced))
+                            .fontWeight(.black)
+                            .foregroundColor(.gray)
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                        
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 6) {
+                                ForEach(messages) { msg in
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Text(msg.username)
+                                            .font(.system(.caption2, design: .monospaced))
+                                            .fontWeight(.bold)
+                                            .foregroundColor(Color(red: 0.831, green: 0.686, blue: 0.216))
+                                        
+                                        Text(msg.message)
+                                            .font(.system(.caption2, design: .monospaced))
+                                            .foregroundColor(.white)
+                                        
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
+                        }
+                        .frame(height: 120)
+                        
+                        // Chat input
+                        HStack {
+                            TextField("Say something...", text: $chatMessage)
+                                .font(.system(.caption, design: .monospaced))
+                                .padding(8)
+                                .background(Color(red: 0.15, green: 0.15, blue: 0.15))
+                                .cornerRadius(8)
+                            
+                            Button(action: {
+                                if !chatMessage.isEmpty {
+                                    messages.append(ChatMessageData(username: djName, message: chatMessage, time: "now"))
+                                    chatMessage = ""
+                                }
+                            }) {
+                                Image(systemName: "paperplane.fill")
+                                    .foregroundColor(Color(red: 0.831, green: 0.686, blue: 0.216))
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                    }
+                    .background(Color.black.opacity(0.8))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                }
+                
+                // DJ Name
+                if !djName.isEmpty {
+                    Text(djName)
+                        .font(.system(.headline, design: .monospaced))
+                        .fontWeight(.black)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.6))
+                        .cornerRadius(8)
+                }
+                
+                // Bitrate/Time
+                if isLive {
+                    HStack {
+                        Text(streamManager.currentBitrate).bold()
+                        Text("|")
+                        Text(streamManager.streamDuration)
+                    }
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.6))
+                    .cornerRadius(5)
+                }
+                
+                // Go Live Button
+                Button(action: {
+                    if isLive {
+                        isLive = false
+                        streamManager.stopStreaming()
+                    } else {
+                        Task {
+                            await startStreaming()
+                        }
+                    }
+                }) {
+                    HStack {
+                        if isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        } else {
+                            Text(isLive ? "STOP STREAM" : "START STREAMING")
+                                .font(.headline)
+                                .foregroundColor(isLive ? .white : .black)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(isLive ? Color.red : Color(red: 0.831, green: 0.686, blue: 0.216))
+                    .cornerRadius(15)
+                }
+                .disabled(isLoading)
+                .padding(40)
+            }
+            
+            // Stream Settings Modal
+            if showStreamSettings {
+                StreamSettingsView(
+                    isPresented: $showStreamSettings,
+                    rtmpUrl: rtmpUrl.isEmpty ? "rtmp://live.cloudflare.com:443/live" : rtmpUrl,
+                    streamKey: streamKey.isEmpty ? "your-stream-key" : streamKey
+                )
+            }
+        }
+        .onAppear {
+            streamManager.startCapture()
+        }
+    }
+    
+    func startStreaming() async {
+        isLoading = true
+        
+        do {
+            guard let url = URL(string: "\(apiBaseUrl)/cloudflare/rtmp") else {
+                print("Invalid URL")
+                await MainActor.run { isLoading = false }
+                return
+            }
+            
+            let (data, response) = try await URLSession.shared.data(from: url)
+            
+            if let httpResponse = response as? HTTPURLResponse,
+               httpResponse.statusCode == 200,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                
+                if let rtmp = json["rtmp"] as? [String: String],
+                   let url = rtmp["url"],
+                   let key = rtmp["key"] {
+                    
+                    await MainActor.run {
+                        self.rtmpUrl = url
+                        self.streamKey = key
+                        self.isLive = true
+                        self.isLoading = false
+                    }
+                    
+                    streamManager.connectAndPublish(url: url, key: key)
+                } else {
+                    await useFallbackCredentials()
+                }
+            } else {
+                print("API returned non-JSON response, using fallback")
+                await useFallbackCredentials()
+            }
+        } catch {
+            print("Failed to fetch credentials: \(error)")
+            await useFallbackCredentials()
+        }
+    }
+    
+    func useFallbackCredentials() async {
+        let fallbackUrl = "rtmp://live.cloudflare.com:443/live"
+        let fallbackKey = "4bb182b6458f5b3aad78855863643283"
+        
+        await MainActor.run {
+            self.rtmpUrl = fallbackUrl
+            self.streamKey = fallbackKey
+            self.isLive = true
+            self.isLoading = false
+        }
+        
+        streamManager.connectAndPublish(url: fallbackUrl, key: fallbackKey)
+    }
+}
+
+struct ChatMessageData: Identifiable {
+    let id = UUID()
+    let username: String
+    let message: String
+    let time: String
+}
+
+// Stream Settings View
+struct StreamSettingsView: View {
+    @Binding var isPresented: Bool
+    @State var rtmpUrl: String
+    @State var streamKey: String
+    
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.9)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                HStack {
+                    Text("STREAM SETTINGS")
+                        .font(.system(.headline, design: .monospaced))
+                        .fontWeight(.black)
+                        .foregroundColor(Color(red: 0.831, green: 0.686, blue: 0.216))
+                    
+                    Spacer()
+                    
+                    Button("CLOSE") {
+                        isPresented = false
+                    }
+                    .font(.system(.caption, design: .monospaced))
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("RTMP URL")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.gray)
+                    TextField("RTMP URL", text: $rtmpUrl)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(.body, design: .monospaced))
+                        .autocapitalization(.none)
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("STREAM KEY")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.gray)
+                    SecureField("Stream Key", text: $streamKey)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .font(.system(.body, design: .monospaced))
+                }
+                
+                Button(action: { isPresented = false }) {
+                    Text("SAVE")
+                        .font(.headline)
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color(red: 0.831, green: 0.686, blue: 0.216))
+                        .cornerRadius(10)
+                }
+                
+                Spacer()
+            }
+            .padding(30)
+        }
+    }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}

@@ -1,0 +1,58 @@
+      <div className="pt-16 bg-black">
+        <div className="max-w-[900px] mx-auto px-4">
+          <div className="relative h-[80px] md:h-[100px] overflow-hidden flex items-center justify-center rounded-xl">
+            {slides.map((slide, index) => (
+              <div 
+                key={index} 
+                className={`absolute inset-0 transition-opacity duration-1500 flex items-center justify-center ${index === currentSlide ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}
+              >
+                {slide.type === 'video' && slide.src ? (
+                  <>
+                    <video src={slide.src} autoPlay muted loop playsInline className="w-full h-full object-contain" />
+                    <div className="absolute inset-0 bg-black/30" />
+                  </>
+                ) : (
+                  <div className="w-full h-full bg-neutral-950 border border-neutral-900 flex flex-col justify-between p-3 font-mono relative">
+                    <div className="absolute -right-10 -top-10 w-32 h-32 bg-[#D4AF37]/5 rounded-full blur-2xl pointer-events-none" />
+                  </div>
+                )}
+                
+                {/* Perk text overlay */}
+                {slide.perk && (
+                  <div className="absolute inset-0 flex flex-col justify-between p-2 md:p-3 z-10">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[7px] md:text-[8px] font-bold tracking-[0.3em] text-[#D4AF37] uppercase drop-shadow-lg">{slide.perk.tag}</span>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <h3 className="text-[9px] md:text-xs font-black tracking-widest text-white uppercase drop-shadow-lg truncate">{slide.perk.title}</h3>
+                      <p className="text-[7px] md:text-[8px] text-neutral-300 tracking-wide line-clamp-1 drop-shadow-md">{slide.perk.subtitle}</p>
+                    </div>
+                    <div className="flex justify-between items-center pt-1 border-t border-white/10">
+                      <span className="text-[6px] md:text-[7px] text-neutral-400 uppercase tracking-widest">GUESTLIST ECOSYSTEM</span>
+                      <span className="text-[7px] md:text-[8px] text-[#D4AF37] font-bold tracking-widest cursor-pointer hover:translate-x-0.5 transition-transform">{`[ ${slide.perk.action} → ]`}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            
+            {/* Logo overlays - always visible at bottom corners */}
+            <div className="absolute bottom-1 left-1 z-20">
+              <a href="https://apps.apple.com/gb/app/padpro-dj/id6738889086" target="_blank" rel="noopener noreferrer">
+                <Image src="/PADPRO_MASTER_1024.png" alt="PadPro" width={30} height={30} className="rounded-lg hover:scale-110 transition-transform" />
+              </a>
+            </div>
+            <div className="absolute bottom-1 right-1 z-20">
+              <a href="ratemytransition://">
+                <Image src="/RMT_logo_official_logo_1Black_1024.png" alt="RMT" width={30} height={30} className="rounded-lg hover:scale-110 transition-transform" />
+              </a>
+            </div>
+            
+            <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 flex gap-1.5 z-20">
+              {slides.map((_, index) => (
+                <button key={index} onClick={() => setCurrentSlide(index)} className={`h-1.5 rounded-full transition-all duration-300 ${index === currentSlide ? 'w-4 bg-[#D4AF37]' : 'w-1.5 bg-white/50'}`} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>

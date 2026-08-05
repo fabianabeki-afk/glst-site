@@ -1,0 +1,135 @@
+import Foundation
+import HaishinKit
+import RTMPHaishinKit
+import AVFoundation
+import Combine
+
+class StreamManager: ObservableObject {
+    let mixer = MediaMixer()
+    private var connection = RTMPConnection()
+    @Published var rtmpStream: RTMPStream
+    
+    // sc.2: Monitoring Properties
+    @Published var currentBitrate: String = "0.00 Mbps"
+    @Published var streamDuration: String = "00:00"
+    private var monitorTimer: AnyCancellable?
+    private var startTime: Date?
+    
+    init() {
+        self.rtmpStream = RTMPStream(connection: connection)
+        
+        Task { @MainActor in
+            // Connects hardware to the stream hub
+            await mixer.addOutput(rtmpStream)
+        }
+        
+        setupStreamProfile()
+        startMonitoring()
+    }
+    
+    private func setupStreamProfile() {
+        var vSettings = VideoCodecSettings()
+        // 4K Portrait (2160x3840) or 1080p (1080x1920)
+        // For mobile streaming, 1080p is more reliable
+        vSettings.videoSize = .init(width: 1080, height: 1920)
+        vSettings.bitRate = 6000 * 1000 // 6 Mbps for high quality
+        // profileLevel is read-only in HaishinKit, use default
+        vSettings.maxKeyFrameIntervalDuration = 2 // 2 second keyframe interval
+        
+        var aSettings = AudioCodecSettings()
+        aSettings.bitRate = 192 * 1000 // 192 kbps for better audio quality
+        // sampleRate is read-only in HaishinKit, use default
+        
+        Task {
+            try? await rtmpStream.setVideoSettings(vSettings)
+            try? await rtmpStream.setAudioSettings(aSettings)
+        }
+    }
+    
+    // sc.2: The "Speed Asset" Monitor
+    private func startMonitoring() {
+        monitorTimer = Timer.publish(every: 1.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self else { return }
+
+                Task {
+                    let info = await self.rtmpStream.info
+                    let mbps = Double(info.currentBytesPerSecond) * 8.0 / 1_000_000.0
+                    let duration: String
+
+                    if let start = self.startTime {
+                        let elapsed = Date().timeIntervalSince(start)
+                        let minutes = Int(elapsed) / 60
+                        let seconds = Int(elapsed) % 60
+                        duration = String(format: "%02d:%02d", minutes, seconds)
+                    } else {
+                        duration = "00:00"
+                    }
+
+                    await MainActor.run {
+                        self.streamDuration = duration
+                        self.currentBitrate = String(format: "%.2f Mbps", mbps)
+                    }
+                }
+            }
+    }
+    
+    func startCapture() {
+        Task { @MainActor in
+            let session = AVAudioSession.sharedInstance()
+            do {
+                let options: AVAudioSession.CategoryOptions = [.defaultToSpeaker, .allowBluetoothHFP]
+                try session.setCategory(.playAndRecord, mode: .default, options: options)
+                try session.setActive(true)
+            } catch {
+                print("GLST: Audio Session Setup Error: \(error)")
+            }
+
+            // Use high quality back camera
+            let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+            let audioDevice = AVCaptureDevice.default(for: .audio)
+            
+            do {
+                try await mixer.attachVideo(videoDevice)
+                try await mixer.attachAudio(audioDevice)
+                
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                
+                // Portrait orientation for mobile
+                await mixer.setVideoOrientation(.portrait)
+                await mixer.startRunning()
+                
+                print("GUESTLIST: Studio Engine is officially RUNNING")
+            } catch {
+                print("GUESTLIST Hardware Error: \(error)")
+            }
+        }
+    }
+    
+    func connectAndPublish(url: String, key: String) {
+        startTime = Date()
+        Task {
+            do {
+                _ = try await connection.connect(url)
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                _ = try await rtmpStream.publish(key)
+                print("GUESTLIST: Streaming Live to Cloudflare via RTMP")
+            } catch {
+                print("GUESTLIST Connection Error: \(error)")
+            }
+        }
+    }
+    
+    func stopStreaming() {
+        Task {
+            _ = try? await rtmpStream.close()
+            try? await connection.close()
+            await MainActor.run {
+                startTime = nil
+                streamDuration = "00:00"
+                currentBitrate = "0.00 Mbps"
+            }
+        }
+    }
+}
