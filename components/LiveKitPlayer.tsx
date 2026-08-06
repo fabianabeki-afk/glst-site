@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Room, RoomEvent, Track } from 'livekit-client';
 
 interface LiveKitPlayerProps {
@@ -9,12 +9,25 @@ interface LiveKitPlayerProps {
 
 export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
+  const trackRef = useRef<any>(null);
 
   console.log('LiveKitPlayer render - token:', token ? 'present' : 'missing', 'url:', url);
+
+  // Handle video track attachment
+  const attachVideoTrack = useCallback((track: any) => {
+    console.log('Attaching video track');
+    if (videoRef.current) {
+      // Don't replace the video element, just attach the media stream
+      track.attach(videoRef.current);
+      trackRef.current = track;
+    }
+    setIsLoading(false);
+  }, []);
 
   useEffect(() => {
     console.log('LiveKitPlayer useEffect - token:', token ? 'present' : 'missing');
@@ -39,11 +52,7 @@ export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPla
         room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
           console.log('TrackSubscribed event:', track.kind, 'from', participant.identity);
           if (track.kind === Track.Kind.Video) {
-            console.log('Attaching video track');
-            if (videoRef.current) {
-              track.attach(videoRef.current);
-            }
-            setIsLoading(false);
+            attachVideoTrack(track);
           }
         });
 
@@ -84,15 +93,18 @@ export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPla
     connectToRoom();
 
     return () => {
+      if (trackRef.current) {
+        trackRef.current.detach();
+      }
       if (roomRef.current) {
         roomRef.current.disconnect();
-        setIsConnected(false);
       }
+      setIsConnected(false);
     };
-  }, [url, token]);
+  }, [url, token, attachVideoTrack]);
 
   return (
-    <div className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative ${className}`}>
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
           <div className="text-white text-center">
