@@ -519,7 +519,7 @@ export default function GuestlistHomepage() {
         )}
 
         {/* BROADCAST PLAYER CONTAINER */}
-        <div className="aspect-video bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 relative shadow-2xl">
+        <div className="bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 relative shadow-2xl mx-auto" style={{ aspectRatio: '9/16', maxHeight: '70vh', maxWidth: '500px' }}>
           {isDJ && !previewAsFan ? (
             cameraStream ? (
               <>
