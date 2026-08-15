@@ -133,7 +133,7 @@ export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPla
         autoPlay
         playsInline
         muted
-        className="w-full h-full object-cover"
+        className="w-full h-full object-contain"
         style={{ backgroundColor: '#000' }}
       />
       
