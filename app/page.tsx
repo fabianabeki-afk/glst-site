@@ -69,6 +69,7 @@ export default function GuestlistHomepage() {
   const [isInitializingBroadcast, setIsInitializingBroadcast] = useState(false);
   const [broadcastDuration, setBroadcastDuration] = useState(0);
   const broadcastTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [streamOrientation, setStreamOrientation] = useState<'landscape' | 'portrait' | 'unknown'>('unknown');
 
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -519,56 +520,109 @@ export default function GuestlistHomepage() {
         )}
 
         {/* BROADCAST PLAYER CONTAINER */}
-        <div className="aspect-video bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 relative shadow-2xl mx-auto" style={{ maxHeight: '70vh', maxWidth: '900px' }}>
-          {isDJ && !previewAsFan ? (
-            cameraStream ? (
-              <>
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                {isLiveStream && (
-                  <div className="absolute top-4 left-4 bg-rose-600/95 text-white px-3 py-1 rounded-full font-black text-[10px] tracking-widest uppercase animate-pulse">
-                    🔴 LIVE
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full gap-3 text-neutral-600">
-                <span className="text-4xl">🎛️</span>
-                <span className="text-[11px] tracking-widest uppercase font-bold text-neutral-500">[ FEED_OFFLINE ]: START CAMERA TO PREVIEW</span>
+        {streamOrientation === 'portrait' ? (
+          /* PORTRAIT LAYOUT - 3 panels with side overlays */
+          <div className="bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto flex" style={{ maxHeight: '70vh', maxWidth: '900px' }}>
+            {/* LEFT OVERLAY - DJ Avatar/Info */}
+            <div className="w-48 bg-neutral-950 border-r border-neutral-800 flex flex-col items-center justify-center p-4 space-y-3 hidden sm:flex">
+              <div className="w-20 h-20 bg-gradient-to-br from-[#D4AF37] to-orange-600 rounded-full flex items-center justify-center text-3xl shadow-md">🎧</div>
+              <div className="text-center">
+                <p className="text-xs font-bold text-white">{activeStream.djName}</p>
+                <p className="text-[10px] text-neutral-400 mt-1">Dubstep • Garage</p>
               </div>
-            )
-          ) : (
-            <LiveKitPlayer url={activeStream.livekitUrl} token={livekitToken} className="w-full h-full" />
-          )}
-
-          <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-md border-t border-white/10 px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
-                <span className="text-[9px] font-black text-neutral-300 tracking-widest">142</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-black text-[#D4AF37]">●</span>
-                <span className="text-[9px] font-black text-neutral-300 tracking-widest">{isDJ && isLiveStream ? formatDuration(broadcastDuration) : '45:32'}</span>
+              <div className="w-full bg-neutral-900 rounded-lg p-2">
+                <p className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold mb-1">Now Playing</p>
+                <p className="text-[10px] text-[#D4AF37]">Unknown Track</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-[9px] font-black text-neutral-400 tracking-widest">
-                HEAT {hapticMetrics.globalHeatIndex}°
+
+            {/* CENTER - Portrait Video */}
+            <div className="flex-1 bg-black relative" style={{ aspectRatio: '9/16', maxHeight: '70vh' }}>
+              <LiveKitPlayer 
+                url={activeStream.livekitUrl} 
+                token={livekitToken} 
+                className="w-full h-full"
+                onVideoDimensions={(w, h) => {
+                  if (h > w) setStreamOrientation('portrait');
+                  else setStreamOrientation('landscape');
+                }}
+              />
+            </div>
+
+            {/* RIGHT OVERLAY - Chat/Reactions */}
+            <div className="w-48 bg-neutral-950 border-l border-neutral-800 flex flex-col hidden sm:flex">
+              <div className="p-3 border-b border-neutral-800">
+                <h3 className="text-[10px] font-black tracking-widest text-[#D4AF37] uppercase">💬 LIVE CHAT</h3>
               </div>
-              {isDJ && (
-                <button
-                  onClick={handleGoLive}
-                  disabled={isInitializingBroadcast || !isCapturing}
-                  className={`text-[9px] font-black tracking-widest px-3 py-1 rounded transition-colors ${
-                    isLiveStream ? 'bg-rose-600 text-white' : 'bg-[#D4AF37] text-black hover:bg-[#AA8417]'
-                  } disabled:opacity-40 disabled:cursor-not-allowed`}
-                >
-                  {isLiveStream ? 'END' : isInitializingBroadcast ? '...' : 'GO LIVE'}
-                </button>
-              )}
+              <div className="flex-1 p-3 space-y-2 overflow-y-auto">
+                <div className="text-[10px] text-neutral-500 text-center py-4">Chat messages appear here</div>
+              </div>
+              <div className="p-3 border-t border-neutral-800">
+                <div className="text-[9px] text-neutral-400 text-center">🔥 142 viewers</div>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          /* LANDSCAPE LAYOUT - Normal 16:9 player */
+          <div className="aspect-video bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 relative shadow-2xl mx-auto" style={{ maxHeight: '70vh', maxWidth: '900px' }}>
+            {isDJ && !previewAsFan ? (
+              cameraStream ? (
+                <>
+                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                  {isLiveStream && (
+                    <div className="absolute top-4 left-4 bg-rose-600/95 text-white px-3 py-1 rounded-full font-black text-[10px] tracking-widest uppercase animate-pulse">
+                      🔴 LIVE
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-neutral-600">
+                  <span className="text-4xl">🎛️</span>
+                  <span className="text-[11px] tracking-widest uppercase font-bold text-neutral-500">[ FEED_OFFLINE ]: START CAMERA TO PREVIEW</span>
+                </div>
+              )
+            ) : (
+              <LiveKitPlayer 
+                url={activeStream.livekitUrl} 
+                token={livekitToken} 
+                className="w-full h-full"
+                onVideoDimensions={(w, h) => {
+                  if (h > w) setStreamOrientation('portrait');
+                  else setStreamOrientation('landscape');
+                }}
+              />
+            )}
+
+            <div className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-md border-t border-white/10 px-4 py-2 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                  <span className="text-[9px] font-black text-neutral-300 tracking-widest">142</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-black text-[#D4AF37]">●</span>
+                  <span className="text-[9px] font-black text-neutral-300 tracking-widest">{isDJ && isLiveStream ? formatDuration(broadcastDuration) : '45:32'}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-[9px] font-black text-neutral-400 tracking-widest">
+                  HEAT {hapticMetrics.globalHeatIndex}°
+                </div>
+                {isDJ && (
+                  <button
+                    onClick={handleGoLive}
+                    disabled={isInitializingBroadcast || !isCapturing}
+                    className={`text-[9px] font-black tracking-widest px-3 py-1 rounded transition-colors ${
+                      isLiveStream ? 'bg-rose-600 text-white' : 'bg-[#D4AF37] text-black hover:bg-[#AA8417]'
+                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    {isLiveStream ? 'END' : isInitializingBroadcast ? '...' : 'GO LIVE'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* MINI-BRAND ROOM CARDS (Balanced proportions matching screenshot reference 2) */}
         <div className="space-y-2">

@@ -5,9 +5,10 @@ interface LiveKitPlayerProps {
   url: string;
   token: string;
   className?: string;
+  onVideoDimensions?: (width: number, height: number) => void;
 }
 
-export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPlayerProps) {
+export default function LiveKitPlayer({ url, token, className = '', onVideoDimensions }: LiveKitPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,9 +26,16 @@ export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPla
       // Don't replace the video element, just attach the media stream
       track.attach(videoRef.current);
       trackRef.current = track;
+      
+      // Detect video dimensions when metadata loads
+      videoRef.current.onloadedmetadata = () => {
+        if (videoRef.current && onVideoDimensions) {
+          onVideoDimensions(videoRef.current.videoWidth, videoRef.current.videoHeight);
+        }
+      };
     }
     setIsLoading(false);
-  }, []);
+  }, [onVideoDimensions]);
 
   useEffect(() => {
     console.log('LiveKitPlayer useEffect - token:', token ? 'present' : 'missing');
