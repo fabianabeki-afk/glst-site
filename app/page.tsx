@@ -520,55 +520,26 @@ export default function GuestlistHomepage() {
           </div>
         )}
 
-        {/* BROADCAST PLAYER CONTAINER */}
-        {streamOrientation === 'portrait' ? (
-          /* PORTRAIT LAYOUT - 3 panels with side overlays */
-          <div className="bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto flex" style={{ maxHeight: '70vh', maxWidth: '900px' }}>
-            {/* LEFT OVERLAY - DJ Avatar/Info */}
-            <div className="w-48 bg-neutral-950 border-r border-neutral-800 flex flex-col items-center justify-center p-4 space-y-3 hidden sm:flex">
-              <div className="w-20 h-20 bg-gradient-to-br from-[#D4AF37] to-orange-600 rounded-full flex items-center justify-center text-3xl shadow-md">🎧</div>
-              <div className="text-center">
-                <p className="text-xs font-bold text-white">{activeStream.djName}</p>
-                <p className="text-[10px] text-neutral-400 mt-1">Dubstep • Garage</p>
-              </div>
-              <div className="w-full bg-neutral-900 rounded-lg p-2">
-                <p className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold mb-1">Now Playing</p>
-                <p className="text-[10px] text-[#D4AF37]">Unknown Track</p>
-              </div>
+        {/* BROADCAST PLAYER CONTAINER - Single stable container */}
+        <div className="bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl mx-auto flex relative" style={{ maxHeight: '70vh', maxWidth: '900px' }}>
+          {/* LEFT OVERLAY - DJ Avatar/Info (hidden on landscape) */}
+          <div className={`w-48 bg-neutral-950 border-r border-neutral-800 flex flex-col items-center justify-center p-4 space-y-3 transition-all duration-500 ${streamOrientation === 'portrait' ? 'sm:flex' : 'hidden'}`}>
+            <div className="w-20 h-20 bg-gradient-to-br from-[#D4AF37] to-orange-600 rounded-full flex items-center justify-center text-3xl shadow-md">🎧</div>
+            <div className="text-center">
+              <p className="text-xs font-bold text-white">{activeStream.djName}</p>
+              <p className="text-[10px] text-neutral-400 mt-1">Dubstep • Garage</p>
             </div>
-
-            {/* CENTER - Portrait Video */}
-            <div className="flex-1 bg-black relative" style={{ aspectRatio: '9/16', maxHeight: '70vh' }}>
-              <LiveKitPlayer 
-                url={activeStream.livekitUrl} 
-                token={livekitToken} 
-                className="w-full h-full"
-                onVideoDimensions={(w, h) => {
-                  if (!orientationSet.current) {
-                    orientationSet.current = true;
-                    if (h > w) setStreamOrientation('portrait');
-                    else setStreamOrientation('landscape');
-                  }
-                }}
-              />
-            </div>
-
-            {/* RIGHT OVERLAY - Chat/Reactions */}
-            <div className="w-48 bg-neutral-950 border-l border-neutral-800 flex flex-col hidden sm:flex">
-              <div className="p-3 border-b border-neutral-800">
-                <h3 className="text-[10px] font-black tracking-widest text-[#D4AF37] uppercase">💬 LIVE CHAT</h3>
-              </div>
-              <div className="flex-1 p-3 space-y-2 overflow-y-auto">
-                <div className="text-[10px] text-neutral-500 text-center py-4">Chat messages appear here</div>
-              </div>
-              <div className="p-3 border-t border-neutral-800">
-                <div className="text-[9px] text-neutral-400 text-center">🔥 142 viewers</div>
-              </div>
+            <div className="w-full bg-neutral-900 rounded-lg p-2">
+              <p className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold mb-1">Now Playing</p>
+              <p className="text-[10px] text-[#D4AF37]">Unknown Track</p>
             </div>
           </div>
-        ) : (
-          /* LANDSCAPE LAYOUT - Normal 16:9 player */
-          <div className="aspect-video bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 relative shadow-2xl mx-auto" style={{ maxHeight: '70vh', maxWidth: '900px' }}>
+
+          {/* CENTER - Video (always mounted, CSS adjusts size) */}
+          <div className="flex-1 bg-black relative" style={{ 
+            aspectRatio: streamOrientation === 'portrait' ? '9/16' : '16/9',
+            maxHeight: '70vh'
+          }}>
             {isDJ && !previewAsFan ? (
               cameraStream ? (
                 <>
@@ -629,7 +600,20 @@ export default function GuestlistHomepage() {
               </div>
             </div>
           </div>
-        )}
+
+          {/* RIGHT OVERLAY - Chat/Reactions (hidden on landscape) */}
+          <div className={`w-48 bg-neutral-950 border-l border-neutral-800 flex flex-col transition-all duration-500 ${streamOrientation === 'portrait' ? 'sm:flex' : 'hidden'}`}>
+            <div className="p-3 border-b border-neutral-800">
+              <h3 className="text-[10px] font-black tracking-widest text-[#D4AF37] uppercase">💬 LIVE CHAT</h3>
+            </div>
+            <div className="flex-1 p-3 space-y-2 overflow-y-auto">
+              <div className="text-[10px] text-neutral-500 text-center py-4">Chat messages appear here</div>
+            </div>
+            <div className="p-3 border-t border-neutral-800">
+              <div className="text-[9px] text-neutral-400 text-center">🔥 142 viewers</div>
+            </div>
+          </div>
+        </div>
 
         {/* MINI-BRAND ROOM CARDS (Balanced proportions matching screenshot reference 2) */}
         <div className="space-y-2">
