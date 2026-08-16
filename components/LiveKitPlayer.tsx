@@ -55,8 +55,8 @@ export default function LiveKitPlayer({ url, token, className = '', onVideoDimen
         setError(null);
 
         const room = new Room({
-          adaptiveStream: true,
-          dynacast: true,
+          adaptiveStream: false,
+          dynacast: false,
         });
 
         roomRef.current = room;
@@ -147,7 +147,7 @@ export default function LiveKitPlayer({ url, token, className = '', onVideoDimen
         playsInline
         muted
         className="w-full h-full object-contain"
-        style={{ backgroundColor: '#000' }}
+        style={{ backgroundColor: '#000', willChange: 'transform' }}
       />
       
       {isConnected && (
