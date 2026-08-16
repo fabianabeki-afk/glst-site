@@ -16,6 +16,7 @@ export default function LiveKitPlayer({ url, token, className = '', onVideoDimen
   const [error, setError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
   const trackRef = useRef<any>(null);
+  const dimensionsReported = useRef(false);
 
   console.log('LiveKitPlayer render - token:', token ? 'present' : 'missing', 'url:', url);
 
@@ -27,10 +28,14 @@ export default function LiveKitPlayer({ url, token, className = '', onVideoDimen
       track.attach(videoRef.current);
       trackRef.current = track;
       
-      // Detect video dimensions when metadata loads
+      // Detect video dimensions when metadata loads - only report once
       videoRef.current.onloadedmetadata = () => {
-        if (videoRef.current && onVideoDimensions) {
-          onVideoDimensions(videoRef.current.videoWidth, videoRef.current.videoHeight);
+        if (videoRef.current && onVideoDimensions && !dimensionsReported.current) {
+          dimensionsReported.current = true;
+          const w = videoRef.current.videoWidth;
+          const h = videoRef.current.videoHeight;
+          console.log('Video dimensions detected:', w, 'x', h, '- orientation:', h > w ? 'portrait' : 'landscape');
+          onVideoDimensions(w, h);
         }
       };
     }

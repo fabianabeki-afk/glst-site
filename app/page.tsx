@@ -70,6 +70,7 @@ export default function GuestlistHomepage() {
   const [broadcastDuration, setBroadcastDuration] = useState(0);
   const broadcastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [streamOrientation, setStreamOrientation] = useState<'landscape' | 'portrait' | 'unknown'>('unknown');
+  const orientationSet = useRef(false);
 
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -543,8 +544,11 @@ export default function GuestlistHomepage() {
                 token={livekitToken} 
                 className="w-full h-full"
                 onVideoDimensions={(w, h) => {
-                  if (h > w) setStreamOrientation('portrait');
-                  else setStreamOrientation('landscape');
+                  if (!orientationSet.current) {
+                    orientationSet.current = true;
+                    if (h > w) setStreamOrientation('portrait');
+                    else setStreamOrientation('landscape');
+                  }
                 }}
               />
             </div>
@@ -587,8 +591,11 @@ export default function GuestlistHomepage() {
                 token={livekitToken} 
                 className="w-full h-full"
                 onVideoDimensions={(w, h) => {
-                  if (h > w) setStreamOrientation('portrait');
-                  else setStreamOrientation('landscape');
+                  if (!orientationSet.current) {
+                    orientationSet.current = true;
+                    if (h > w) setStreamOrientation('portrait');
+                    else setStreamOrientation('landscape');
+                  }
                 }}
               />
             )}
