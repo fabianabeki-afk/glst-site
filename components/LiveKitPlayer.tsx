@@ -17,37 +17,41 @@ export default function LiveKitPlayer({ url, token, className = '', onVideoDimen
   const roomRef = useRef<Room | null>(null);
   const trackRef = useRef<any>(null);
   const dimensionsReported = useRef(false);
+  const onVideoDimensionsRef = useRef(onVideoDimensions);
 
-  console.log('LiveKitPlayer render - token:', token ? 'present' : 'missing', 'url:', url);
+  // Keep ref in sync without triggering re-renders
+  onVideoDimensionsRef.current = onVideoDimensions;
 
-  // Handle video track attachment
+  // Handle video track attachment - stable callback, no dependencies
   const attachVideoTrack = useCallback((track: any) => {
-    console.log('Attaching video track');
     if (videoRef.current) {
-      // Don't replace the video element, just attach the media stream
       track.attach(videoRef.current);
       trackRef.current = track;
       
       // Detect video dimensions when metadata loads - only report once
       videoRef.current.onloadedmetadata = () => {
-        if (videoRef.current && onVideoDimensions && !dimensionsReported.current) {
+        if (videoRef.current && onVideoDimensionsRef.current && !dimensionsReported.current) {
           dimensionsReported.current = true;
           const w = videoRef.current.videoWidth;
           const h = videoRef.current.videoHeight;
-          console.log('Video dimensions detected:', w, 'x', h, '- orientation:', h > w ? 'portrait' : 'landscape');
-          onVideoDimensions(w, h);
+          onVideoDimensionsRef.current(w, h);
         }
       };
     }
     setIsLoading(false);
-  }, [onVideoDimensions]);
+  }, []); // NO dependencies - stable forever
 
   useEffect(() => {
-    console.log('LiveKitPlayer useEffect - token:', token ? 'present' : 'missing');
-    if (!token) {
-      console.log('No token provided, skipping connection');
+    if (!token || !url) {
       return;
     }
+
+    // Prevent reconnection while already connected to same room
+    if (roomRef.current?.state === 'connected') {
+      return;
+    }
+
+    let cancelled = false;
 
     const connectToRoom = async () => {
       try {
@@ -63,7 +67,6 @@ export default function LiveKitPlayer({ url, token, className = '', onVideoDimen
 
         // Handle incoming video tracks
         room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-          console.log('TrackSubscribed event:', track.kind, 'from', participant.identity);
           if (track.kind === Track.Kind.Video) {
             attachVideoTrack(track);
           }
@@ -83,21 +86,18 @@ export default function LiveKitPlayer({ url, token, className = '', onVideoDimen
 
         // Connect to room
         await room.connect(url, token);
+        if (cancelled) return;
         setIsConnected(true);
-        console.log('Connected to LiveKit room');
-        console.log('Remote participants:', room.remoteParticipants.size);
         
         // Subscribe to all existing tracks from remote participants
         room.remoteParticipants.forEach(participant => {
-          console.log('Participant:', participant.identity, 'Tracks:', participant.trackPublications.size);
           participant.trackPublications.forEach(publication => {
-            console.log('Subscribing to track:', publication.trackName, 'Kind:', publication.kind);
             publication.setSubscribed(true);
           });
         });
 
       } catch (err) {
-        console.error('LiveKit connection error:', err);
+        if (cancelled) return;
         setError('Failed to connect to stream');
         setIsLoading(false);
       }
@@ -106,15 +106,18 @@ export default function LiveKitPlayer({ url, token, className = '', onVideoDimen
     connectToRoom();
 
     return () => {
+      cancelled = true;
       if (trackRef.current) {
         trackRef.current.detach();
+        trackRef.current = null;
       }
       if (roomRef.current) {
         roomRef.current.disconnect();
+        roomRef.current = null;
       }
       setIsConnected(false);
     };
-  }, [url, token, attachVideoTrack]);
+  }, [url, token]); // ONLY url and token - no attachVideoTrack
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
