@@ -61,6 +61,22 @@ export default function LiveKitPlayer({ url, token, className = '', onVideoDimen
         const room = new Room({
           adaptiveStream: false,
           dynacast: false,
+          // Quality improvements
+          publishDefaults: {
+            videoCodec: 'h264',  // Better browser compatibility than VP8
+            videoEncoding: {
+              maxBitrate: 2_500_000,  // 2.5 Mbps for 1080p
+              maxFramerate: 30,
+            },
+            screenShareEncoding: {
+              maxBitrate: 5_000_000,  // 5 Mbps for screen share
+              maxFramerate: 30,
+            },
+          },
+          // Subscribe to highest quality available
+          videoCaptureDefaults: {
+            resolution: { width: 1920, height: 1080 },
+          },
         });
 
         roomRef.current = room;
