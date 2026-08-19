@@ -1,0 +1,3 @@
+{
+  "/api/cloudflare/rtmp/route": "app/api/cloudflare/rtmp/route.js"
+}

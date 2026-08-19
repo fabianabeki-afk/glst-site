@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Room, RoomEvent } from 'livekit-client';
 
 export interface MediaDeviceChoice {
   deviceId: string;
@@ -21,15 +22,15 @@ export function useGuestlistCamera() {
 
   // Master Gain & Audio Metering States
   const [audioLevel, setAudioLevel] = useState<number>(0);
-  const [inputGain, setInputGain] = useState<number>(1.0); // Default 100% gain
+  const [inputGain, setInputGain] = useState<number>(1.0);
   const gainNodeRef = useRef<GainNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const wakeLockRef = useRef<any>(null);
 
-  // WebRTC PeerConnection Ref for Mux Ingest
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  // LiveKit Room Ref
+  const livekitRoomRef = useRef<Room | null>(null);
 
   const refreshDevices = useCallback(async () => {
     try {
@@ -81,7 +82,6 @@ export function useGuestlistCamera() {
       gainNode.gain.value = inputGain;
       analyser.fftSize = 64;
 
-      // Source -> Gain -> Analyser
       source.connect(gainNode);
       gainNode.connect(analyser);
 
@@ -110,7 +110,6 @@ export function useGuestlistCamera() {
     }
   };
 
-  // Adjust Master Volume Gain Level (0.0 to 2.0)
   const changeGain = (newGain: number) => {
     setInputGain(newGain);
     if (gainNodeRef.current) {
@@ -177,9 +176,10 @@ export function useGuestlistCamera() {
   }, [selectedVideoId, selectedAudioId, activeStream, refreshDevices]);
 
   const stopCapture = useCallback(() => {
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
+    // Disconnect LiveKit room if connected
+    if (livekitRoomRef.current) {
+      livekitRoomRef.current.disconnect();
+      livekitRoomRef.current = null;
     }
     if (activeStream) {
       activeStream.getTracks().forEach(track => {
@@ -198,131 +198,87 @@ export function useGuestlistCamera() {
     setIsLiveStream(false);
   }, [activeStream]);
 
-  // Native WHIP Handshake proxied through local Next.js server route (/api/mux/whip)
-  const startMuxWhipBroadcast = async (target: string) => {
+  // LiveKit Broadcast
+  const startLiveKitBroadcast = async () => {
     if (!activeStream) {
       throw new Error("No active media stream found.");
     }
 
     try {
-      // 1. Create WebRTC PeerConnection with STUN Servers
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' }
-        ]
-      });
-      peerConnectionRef.current = pc;
-
-      // 2. Add audio and video tracks as 'sendonly' for WHIP ingestion
-      activeStream.getTracks().forEach(track => {
-        pc.addTransceiver(track, {
-          direction: 'sendonly',
-          streams: [activeStream]
-        });
+      // Get broadcaster token from API
+      const tokenRes = await fetch('/api/livekit/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomName: 'fabiandubz-stream',
+          identity: 'dj-fabian-web',
+          role: 'broadcaster'
+        })
       });
 
-      // 3. Create Local SDP Offer
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      // 4. Wait for WebRTC ICE Candidates to finish gathering
-      await new Promise<void>((resolve) => {
-        if (pc.iceGatheringState === 'complete') {
-          resolve();
-        } else {
-          const checkState = () => {
-            if (pc.iceGatheringState === 'complete') {
-              pc.removeEventListener('icegatheringstatechange', checkState);
-              resolve();
-            }
-          };
-          pc.addEventListener('icegatheringstatechange', checkState);
-          setTimeout(resolve, 1000); // 1.0s fallback timeout
-        }
-      });
-
-      const fullOfferSdp = pc.localDescription?.sdp || offer.sdp;
-
-      // Pass raw dynamic target WHIP URL directly without hostname mutation
-      const whipTargetUrl = target;
-
-      // Try direct browser-to-Mux WHIP first (bypasses server Lambda DNS issues)
-      // If CORS blocks it, we'll catch and can fall back to server proxy
-      let answerSdp: string;
-      try {
-        const directResponse = await fetch(whipTargetUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/sdp',
-            'Accept': 'application/sdp',
-          },
-          body: fullOfferSdp,
-        });
-        
-        if (!directResponse.ok) {
-          throw new Error(`Direct WHIP failed with status ${directResponse.status}`);
-        }
-        
-        answerSdp = await directResponse.text();
-        console.log('[WHIP_DIRECT_SUCCESS]: Browser-to-Mux handshake succeeded');
-      } catch (directErr: any) {
-        console.warn('[WHIP_DIRECT_FALLBACK]:', directErr.message);
-        
-        // Fallback: Post via local server proxy route
-        const proxyResponse = await fetch('/api/mux/whip', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json' 
-          },
-          body: JSON.stringify({
-            whipUrl: whipTargetUrl,
-            sdp: fullOfferSdp
-          })
-        });
-
-        const proxyData = await proxyResponse.json();
-
-        if (!proxyResponse.ok || !proxyData.answerSdp) {
-          throw new Error(proxyData.error || 'Server proxy failed to obtain SDP answer from Mux.');
-        }
-        
-        answerSdp = proxyData.answerSdp;
+      if (!tokenRes.ok) {
+        throw new Error('Failed to get LiveKit token');
       }
 
-      // Set Remote SDP Answer from Mux
-      await pc.setRemoteDescription({
-        type: 'answer',
-        sdp: answerSdp
+      const { token } = await tokenRes.json();
+      
+      // Create LiveKit room
+      const room = new Room({
+        adaptiveStream: false,
+        dynacast: false,
       });
+
+      livekitRoomRef.current = room;
+
+      // Connect to room
+      const wsUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || 'wss://guestlist-tv-ei1a8q8r.livekit.cloud';
+      await room.connect(wsUrl, token);
+      console.log('[LIVEKIT]: Connected to room');
+
+      // Publish audio and video tracks
+      const videoTrack = activeStream.getVideoTracks()[0];
+      const audioTrack = activeStream.getAudioTracks()[0];
+
+      if (videoTrack) {
+        const pub = await room.localParticipant.publishTrack(videoTrack, {
+          name: 'camera',
+          simulcast: false,
+        });
+        console.log('[LIVEKIT]: Published video track', pub.trackSid);
+      }
+
+      if (audioTrack) {
+        const pub = await room.localParticipant.publishTrack(audioTrack, {
+          name: 'microphone',
+        });
+        console.log('[LIVEKIT]: Published audio track', pub.trackSid);
+      }
 
       setIsLiveStream(true);
     } catch (err: any) {
-      console.error("[WHIP_BROADCAST_ERROR]:", err);
-      setError(`Mux Broadcast Failed: ${err.message}`);
+      console.error("[LIVEKIT_BROADCAST_ERROR]:", err);
+      setError(`LiveKit Broadcast Failed: ${err.message}`);
       setIsLiveStream(false);
       throw err;
     }
   };
 
-  const toggleGoLive = async (target?: string) => {
+  const toggleGoLive = async () => {
     if (!isCapturing) {
       alert("PLEASE START CAPTURE ENGINE BEFORE GOING LIVE!");
       return;
     }
 
     if (isLiveStream) {
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
+      // Stop broadcast
+      if (livekitRoomRef.current) {
+        livekitRoomRef.current.disconnect();
+        livekitRoomRef.current = null;
       }
       setIsLiveStream(false);
     } else {
-      if (target) {
-        await startMuxWhipBroadcast(target);
-      } else {
-        setIsLiveStream(true);
-      }
+      // Start LiveKit broadcast
+      await startLiveKitBroadcast();
     }
   };
 

@@ -28,7 +28,8 @@ export function BroadcasterStudio() {
   const [showOverlay, setShowOverlay] = useState(true);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('16:9');
   const [isInitializingMux, setIsInitializingMux] = useState(false);
-  const [livePlaybackUrl, setLivePlaybackUrl] = useState<string | null>(null);
+  
+  // LiveKit doesn't need a playback URL - viewers connect directly to the room
   
   // Explicitly mapping to Audio/Visual Settings menu modal state
   const [isAudioVisualSettingsOpen, setIsAudioVisualSettingsOpen] = useState(false);
@@ -47,7 +48,6 @@ export function BroadcasterStudio() {
   const handleGoLiveClick = async () => {
     if (isLiveStream) {
       await toggleGoLive();
-      setLivePlaybackUrl(null);
       return;
     }
 
@@ -59,14 +59,9 @@ export function BroadcasterStudio() {
     setIsInitializingMux(true);
 
     try {
-      // TEMPORARY: Use existing Cloudflare stream while API auth is fixed
-      const whipUrl = "https://customer-xfdlafmmuylrdexv.cloudflarestream.com/06f1b6c11f4b525397cda0d1614a35bdk4bb182b6458f5b3aad78855863643283/webRTC/publish";
-      const whepUrl = "https://customer-xfdlafmmuylrdexv.cloudflarestream.com/4bb182b6458f5b3aad78855863643283/webRTC/play";
-
-      setLivePlaybackUrl(whepUrl);
-      await toggleGoLive(whipUrl);
+      await toggleGoLive();
     } catch (err: any) {
-      console.error("WHIP_BROADCAST_EXCEPTION:", err);
+      console.error("LIVEKIT_BROADCAST_EXCEPTION:", err);
       alert(`Broadcast Error: ${err.message}`);
     } finally {
       setIsInitializingMux(false);
@@ -289,23 +284,13 @@ export function BroadcasterStudio() {
         </div>
       </div>
 
-      {/* Post-Live Stream URL Banner */}
-      {isLiveStream && livePlaybackUrl && (
-        <div className="mt-2 p-3 bg-neutral-900/90 border border-[#D4AF37]/40 rounded-xl flex items-center justify-between gap-4 text-[11px]">
-          <div className="flex items-center gap-2 text-emerald-400 font-bold uppercase tracking-wider truncate">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
-            <span>LIVE PLAYBACK:</span>
-            <span className="text-neutral-300 font-mono text-[10px] truncate select-all">{livePlaybackUrl}</span>
-          </div>
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(livePlaybackUrl);
-              alert("Playback URL copied to clipboard!");
-            }}
-            className="px-3 py-1 bg-[#D4AF37] text-black font-extrabold rounded text-[9px] uppercase tracking-widest cursor-pointer flex-shrink-0"
-          >
-            COPY LINK
-          </button>
+      {/* LiveKit broadcast indicator */}
+      {isLiveStream && (
+        <div className="mt-2 p-3 bg-neutral-900/90 border border-[#D4AF37]/40 rounded-xl flex items-center justify-center gap-2 text-[11px]">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+          <span className="text-emerald-400 font-bold uppercase tracking-wider">
+            LIVEKIT BROADCAST ACTIVE - VIEWERS CAN CONNECT
+          </span>
         </div>
       )}
 

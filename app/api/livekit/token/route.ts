@@ -21,7 +21,7 @@ export async function POST(request: Request) {
         roomJoin: true,
         room: room,
         canPublish: role === 'broadcaster',
-        canSubscribe: role !== 'broadcaster',
+        canSubscribe: true, // Everyone needs subscribe to join room
         canPublishData: true,
       },
     };
