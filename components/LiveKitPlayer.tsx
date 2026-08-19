@@ -1,27 +1,57 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Room, RoomEvent, Track } from 'livekit-client';
 
 interface LiveKitPlayerProps {
   url: string;
   token: string;
   className?: string;
+  onVideoDimensions?: (width: number, height: number) => void;
 }
 
-export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPlayerProps) {
+export default function LiveKitPlayer({ url, token, className = '', onVideoDimensions }: LiveKitPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
+  const trackRef = useRef<any>(null);
+  const dimensionsReported = useRef(false);
+  const onVideoDimensionsRef = useRef(onVideoDimensions);
 
-  console.log('LiveKitPlayer render - token:', token ? 'present' : 'missing', 'url:', url);
+  // Keep ref in sync without triggering re-renders
+  onVideoDimensionsRef.current = onVideoDimensions;
+
+  // Handle video track attachment - stable callback, no dependencies
+  const attachVideoTrack = useCallback((track: any) => {
+    if (videoRef.current) {
+      track.attach(videoRef.current);
+      trackRef.current = track;
+      
+      // Detect video dimensions when metadata loads - only report once
+      videoRef.current.onloadedmetadata = () => {
+        if (videoRef.current && onVideoDimensionsRef.current && !dimensionsReported.current) {
+          dimensionsReported.current = true;
+          const w = videoRef.current.videoWidth;
+          const h = videoRef.current.videoHeight;
+          onVideoDimensionsRef.current(w, h);
+        }
+      };
+    }
+    setIsLoading(false);
+  }, []); // NO dependencies - stable forever
 
   useEffect(() => {
-    console.log('LiveKitPlayer useEffect - token:', token ? 'present' : 'missing');
-    if (!token) {
-      console.log('No token provided, skipping connection');
+    if (!token || !url) {
       return;
     }
+
+    // Prevent reconnection while already connected to same room
+    if (roomRef.current?.state === 'connected') {
+      return;
+    }
+
+    let cancelled = false;
 
     const connectToRoom = async () => {
       try {
@@ -29,21 +59,32 @@ export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPla
         setError(null);
 
         const room = new Room({
-          adaptiveStream: true,
-          dynacast: true,
+          adaptiveStream: false,
+          dynacast: false,
+          // Quality improvements
+          publishDefaults: {
+            videoCodec: 'h264',  // Better browser compatibility than VP8
+            videoEncoding: {
+              maxBitrate: 2_500_000,  // 2.5 Mbps for 1080p
+              maxFramerate: 30,
+            },
+            screenShareEncoding: {
+              maxBitrate: 5_000_000,  // 5 Mbps for screen share
+              maxFramerate: 30,
+            },
+          },
+          // Subscribe to highest quality available
+          videoCaptureDefaults: {
+            resolution: { width: 1920, height: 1080 },
+          },
         });
 
         roomRef.current = room;
 
         // Handle incoming video tracks
         room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-          console.log('TrackSubscribed event:', track.kind, 'from', participant.identity);
           if (track.kind === Track.Kind.Video) {
-            console.log('Attaching video track');
-            if (videoRef.current) {
-              track.attach(videoRef.current);
-            }
-            setIsLoading(false);
+            attachVideoTrack(track);
           }
         });
 
@@ -61,21 +102,18 @@ export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPla
 
         // Connect to room
         await room.connect(url, token);
+        if (cancelled) return;
         setIsConnected(true);
-        console.log('Connected to LiveKit room');
-        console.log('Remote participants:', room.remoteParticipants.size);
         
         // Subscribe to all existing tracks from remote participants
         room.remoteParticipants.forEach(participant => {
-          console.log('Participant:', participant.identity, 'Tracks:', participant.trackPublications.size);
           participant.trackPublications.forEach(publication => {
-            console.log('Subscribing to track:', publication.trackName, 'Kind:', publication.kind);
             publication.setSubscribed(true);
           });
         });
 
       } catch (err) {
-        console.error('LiveKit connection error:', err);
+        if (cancelled) return;
         setError('Failed to connect to stream');
         setIsLoading(false);
       }
@@ -84,15 +122,21 @@ export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPla
     connectToRoom();
 
     return () => {
+      cancelled = true;
+      if (trackRef.current) {
+        trackRef.current.detach();
+        trackRef.current = null;
+      }
       if (roomRef.current) {
         roomRef.current.disconnect();
-        setIsConnected(false);
+        roomRef.current = null;
       }
+      setIsConnected(false);
     };
-  }, [url, token]);
+  }, [url, token]); // ONLY url and token - no attachVideoTrack
 
   return (
-    <div className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative ${className}`}>
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
           <div className="text-white text-center">
@@ -122,7 +166,7 @@ export default function LiveKitPlayer({ url, token, className = '' }: LiveKitPla
         playsInline
         muted
         className="w-full h-full object-contain"
-        style={{ backgroundColor: '#000' }}
+        style={{ backgroundColor: '#000', willChange: 'transform' }}
       />
       
       {isConnected && (
